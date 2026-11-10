@@ -1,0 +1,32 @@
+version: 0.2
+
+env:
+  shell: bash
+
+phases:
+  pre_build:
+    commands:
+      - echo "Logging in to Amazon ECR..."
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - AWS_REGION=ap-south-1
+      - REPOSITORY_NAME=brain-tasks
+      - ECR_URI=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY_NAME
+      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION:0:7}
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URI
+
+  build:
+    commands:
+      - echo "Building Docker image..."
+      - docker build -t $REPOSITORY_NAME:$IMAGE_TAG .
+      - docker tag $REPOSITORY_NAME:$IMAGE_TAG $ECR_URI:$IMAGE_TAG
+
+  post_build:
+    commands:
+      - echo "Pushing Docker image to ECR..."
+      - docker push $ECR_URI:$IMAGE_TAG
+      - echo "Docker image successfully pushed."
+      - printf '{"ImageURI":"%s"}' "$ECR_URI:$IMAGE_TAG" > imageDetail.json
+
+artifacts:
+  files:
+    - imageDetail.json
